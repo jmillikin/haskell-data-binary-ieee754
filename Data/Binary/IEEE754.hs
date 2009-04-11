@@ -27,6 +27,10 @@ module Data.Binary.IEEE754 (
 	,splitRawIEEE754
 	,unbias
 	,mergeFloat
+	
+	,Exponent
+	,Fraction
+	,BitCount
 ) where
 
 import Data.Bits ((.&.), shiftL, shiftR)
@@ -36,9 +40,11 @@ import Data.List (foldl')
 import qualified Data.ByteString as B
 import Data.Binary.Get (Get, getByteString)
 
+-- |Parse a big-endian byte list into a floating-point value.
 parseFloatBE :: (RealFloat a) => [Word8] -> a
 parseFloatBE = parseFloat
 
+-- |Parse a little-endian byte list into a floating-point value.
 parseFloatLE :: (RealFloat a) => [Word8] -> a
 parseFloatLE = parseFloat . reverse
 
@@ -64,6 +70,12 @@ type Exponent = Int
 type Fraction = Integer
 type BitCount = Int
 
+-- |Parse a floating-point value of the given width from within a Get monad.
+getFloat :: (RealFloat a) => BitCount -> ([Word8] -> a) -> Get a
+getFloat width parser = do
+	bytes <- getByteString width
+	(return . parser . B.unpack) bytes
+
 parseFloat :: (RealFloat a) => [Word8] -> a
 parseFloat bs = merge' (splitRawIEEE754 bs)
 	where merge'  (sign, e, f) = encode' (mergeFloat e f width) * signFactor sign
@@ -71,12 +83,7 @@ parseFloat bs = merge' (splitRawIEEE754 bs)
 	      signFactor s         = if s then (-1) else 1
 	      width                = length bs * 8
 
-getFloat :: (RealFloat a) => BitCount -> ([Word8] -> a) -> Get a
-getFloat width parser = do
-	bytes <- getByteString width
-	(return . parser . B.unpack) bytes
-
--- Calculate the proper size of the exponent field, in bits, given the
+-- |Calculate the proper size of the exponent field, in bits, given the
 -- size of the full structure.
 exponentWidth :: BitCount -> BitCount
 exponentWidth k
@@ -85,21 +92,23 @@ exponentWidth k
 	| k `mod` 32 == 0 = ceiling (4 * (log2 k)) - 13
 	| otherwise       = error "Invalid length of floating-point value"
 
--- Considering a byte list as a sequence of bits, slice it from start inclusive
--- to end exclusive, and return the resulting bit sequence as an integer
+-- |Considering a byte list as a sequence of bits, slice it from start
+-- inclusive to end exclusive, and return the resulting bit sequence as an
+-- integer
 bitSlice :: [Word8] -> BitCount -> BitCount -> Integer
 bitSlice bs = sliceInt (foldl' step 0 bs) bitCount
 	where step acc w     = (shiftL acc 8) + (fromIntegral w)
 	      bitCount       = ((length bs) * 8)
 
--- Slice a single integer by start and end bit location
+-- |Slice a single integer by start and end bit location
 sliceInt :: Integer -> BitCount -> BitCount -> BitCount -> Integer
 sliceInt x xBitCount s e = fromIntegral $ (x .&. startMask) `shiftR` (xBitCount - e)
 	where startMask = n1Bits (xBitCount - s)
 	      n1Bits n  = (2 `iExp` n) - 1
 
--- Split a raw bit array into (sign, exponent, fraction) components. These
--- components have not been processed (unbiased, added significant bit, etc).
+-- |Split a raw bit array into (sign, exponent, fraction) components. These
+-- components have not been processed (unbiased, added significant bit,
+-- etc).
 splitRawIEEE754 :: [Word8] -> (Bool, Exponent, Fraction)
 splitRawIEEE754 bs = (sign, exp, frac)
 	where sign = (head bs .&. 0x80) == 0x80
@@ -107,11 +116,11 @@ splitRawIEEE754 bs = (sign, exp, frac)
 	      frac = bitSlice bs (1 + w) (length bs * 8)
 	      w    = exponentWidth $ length bs * 8
 
--- Unbias an exponent
+-- |Unbias an exponent
 unbias :: Exponent -> BitCount -> Exponent
 unbias e eWidth = e + 1 - (2 `iExp` (eWidth - 1))
 
--- Parse values into a form suitable for encodeFloat
+-- |Parse values into a form suitable for encodeFloat
 -- sign exponent fraction width-in-bits -> fraction, exponent
 mergeFloat :: Exponent -> Fraction -> BitCount -> (Integer, Int)
 
@@ -134,8 +143,8 @@ mergeFloat e f width
 		      eMax      = (2 `iExp` eWidth) - 1
 		      unbiasedE = unbias e (eWidth)
 
--- Base-2 log of an integer
+-- |Base-2 log of an integer
 log2 = (logBase 2) . fromIntegral
 
--- Integral exponent
+-- |Integral exponent
 iExp b e = floor $ (fromIntegral b) ** (fromIntegral e)
