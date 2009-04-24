@@ -49,29 +49,30 @@ parseFloatLE :: (RealFloat a) => [Word8] -> a
 parseFloatLE = parseFloat . reverse
 
 getFloat16be :: Get Float
-getFloat16be = getFloat 16 parseFloatBE
+getFloat16be = getFloat 2 parseFloatBE
 
 getFloat16le :: Get Float
-getFloat16le = getFloat 16 parseFloatLE
+getFloat16le = getFloat 2 parseFloatLE
 
 getFloat32be :: Get Float
-getFloat32be = getFloat 32 parseFloatBE
+getFloat32be = getFloat 4 parseFloatBE
 
 getFloat32le :: Get Float
-getFloat32le = getFloat 32 parseFloatLE
+getFloat32le = getFloat 4 parseFloatLE
 
 getFloat64be :: Get Double
-getFloat64be = getFloat 64 parseFloatBE
+getFloat64be = getFloat 8 parseFloatBE
 
 getFloat64le :: Get Double
-getFloat64le = getFloat 64 parseFloatLE
+getFloat64le = getFloat 8 parseFloatLE
 
 type Exponent = Int
 type Fraction = Integer
 type BitCount = Int
 
--- |Parse a floating-point value of the given width from within a Get monad.
-getFloat :: (RealFloat a) => BitCount -> ([Word8] -> a) -> Get a
+-- |Parse a floating-point value of the given width (in bytes) from within
+-- a Get monad.
+getFloat :: (RealFloat a) => Int -> ([Word8] -> a) -> Get a
 getFloat width parser = do
 	bytes <- getByteString width
 	(return . parser . B.unpack) bytes

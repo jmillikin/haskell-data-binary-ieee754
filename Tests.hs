@@ -17,8 +17,9 @@
 module Main () where
 
 import Test.HUnit
-
 import Data.Binary.IEEE754
+import qualified Data.ByteString.Lazy as LB
+import Data.Binary.Get (runGetState)
 
 allTests = "allTests" ~: TestList [
 	 exponentWidthTests
@@ -28,6 +29,7 @@ allTests = "allTests" ~: TestList [
 	,mergeFloatTests
 	,parseFloatBETests
 	,parseFloatLETests
+	,getFloatTests
 	]
 
 exponentWidthTests = "wTests" ~: TestList [
@@ -172,6 +174,26 @@ parseFloatLETests = "parseFloat32beTests" ~: TestList [
 	
 	]
 		where testParse ws expected = expected ~=? (parseFloatLE ws)
+
+getFloatTests = "getFloatTests" ~: TestList [
+	 testGetFloat getFloat16be [0, 0] (0.0 :: Float)
+	,testGetFloat getFloat16be [0x80, 0] (-0.0 :: Float)
+	,testGetFloat getFloat16le [0, 0] (0.0 :: Float)
+	,testGetFloat getFloat16le [0, 0x80] (-0.0 :: Float)
+	
+	,testGetFloat getFloat32be [0, 0, 0, 0] (0.0 :: Float)
+	,testGetFloat getFloat32be [0x80, 0, 0, 0] (-0.0 :: Float)
+	,testGetFloat getFloat32le [0, 0, 0, 0] (0.0 :: Float)
+	,testGetFloat getFloat32le [0, 0, 0, 0x80] (-0.0 :: Float)
+	
+	,testGetFloat getFloat64be [0, 0, 0, 0, 0, 0, 0, 0] (0.0 :: Double)
+	,testGetFloat getFloat64be [0x80, 0, 0, 0, 0, 0, 0, 0] (-0.0 :: Double)
+	,testGetFloat getFloat64le [0, 0, 0, 0, 0, 0, 0, 0] (0.0 :: Double)
+	,testGetFloat getFloat64le [0, 0, 0, 0, 0, 0, 0, 0x80] (-0.0 :: Double)
+	]
+		where testGetFloat f ws expected = fullExpected ~=? result
+			where fullExpected = (expected, LB.empty, (fromIntegral (length ws)))
+			      result       = runGetState f (LB.pack ws) (fromIntegral 0)
 
 main = do
 	runTestTT allTests
