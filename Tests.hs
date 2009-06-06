@@ -20,8 +20,11 @@ import Test.HUnit
 import Data.Binary.IEEE754
 import qualified Data.ByteString.Lazy as LB
 import Data.Binary.Get (runGetState)
+import Data.Binary.Put (runPut)
 
-allTests = "allTests" ~: TestList [
+allTests = "allTests" ~: TestList [getTests, putTests]
+
+getTests = "getTests" ~: TestList [
 	 exponentWidthTests
 	,bitSliceTests
 	,splitRawIEEE754Tests
@@ -30,6 +33,16 @@ allTests = "allTests" ~: TestList [
 	,parseFloatBETests
 	,parseFloatLETests
 	,getFloatTests
+	]
+
+putTests = "putTests" ~: TestList [
+	 putFloatTests
+	,floatComponentsTests
+	,biasTests
+	,encodeIntBETests
+	,encodeIntLETests
+	,floatToMergedTests
+	,mergeFloatBitsTests
 	]
 
 exponentWidthTests = "wTests" ~: TestList [
@@ -164,13 +177,13 @@ parseFloatLETests = "parseFloat32beTests" ~: TestList [
 	,testParse [0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x0F, 0x00] ( 2.2250738585072009e-308 :: Double)
 	,testParse [0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x0F, 0x80] (-2.2250738585072009e-308 :: Double)
 	
-	-- Infinity
+	-- TODO: Infinity
 	
-	-- Negative Infinity
+	-- TODO: Negative Infinity
 	
-	-- NaN
+	-- TODO: NaN
 	
-	-- Negative NaN
+	-- TODO: Negative NaN
 	
 	]
 		where testParse ws expected = expected ~=? (parseFloatLE ws)
@@ -194,6 +207,106 @@ getFloatTests = "getFloatTests" ~: TestList [
 		where testGetFloat f ws expected = fullExpected ~=? result
 			where fullExpected = (expected, LB.empty, (fromIntegral (length ws)))
 			      result       = runGetState f (LB.pack ws) (fromIntegral 0)
+
+putFloatTests = "putFloatTests" ~: TestList [
+	-- 0 and -0
+	 testPutFloat putFloat32be ( 0.0 :: Float) [0, 0, 0, 0]
+	,testPutFloat putFloat32be (-0.0 :: Float) [0x80, 0, 0, 0]
+	,testPutFloat putFloat32le ( 0.0 :: Float) [0, 0, 0, 0]
+	,testPutFloat putFloat32le (-0.0 :: Float) [0, 0, 0, 0x80]
+	
+	,testPutFloat putFloat64be ( 0.0 :: Double) [0, 0, 0, 0, 0, 0, 0, 0]
+	,testPutFloat putFloat64be (-0.0 :: Double) [0x80, 0, 0, 0, 0, 0, 0, 0]
+	,testPutFloat putFloat64le ( 0.0 :: Double) [0, 0, 0, 0, 0, 0, 0, 0]
+	,testPutFloat putFloat64le (-0.0 :: Double) [0, 0, 0, 0, 0, 0, 0, 0x80]
+	
+	-- 1 and -1
+	,testPutFloat putFloat32be ( 1.0 :: Float) [0x3F, 0x80, 0, 0]
+	,testPutFloat putFloat32be (-1.0 :: Float) [0xBF, 0x80, 0, 0]
+	,testPutFloat putFloat32le ( 1.0 :: Float) [0, 0, 0x80, 0x3F]
+	,testPutFloat putFloat32le (-1.0 :: Float) [0, 0, 0x80, 0xBF]
+	
+	,testPutFloat putFloat64be ( 1.0 :: Double) [0x3F, 0xF0, 0, 0, 0, 0, 0, 0]
+	,testPutFloat putFloat64be (-1.0 :: Double) [0xBF, 0xF0, 0, 0, 0, 0, 0, 0]
+	,testPutFloat putFloat64le ( 1.0 :: Double) [0, 0, 0, 0, 0, 0, 0xF0, 0x3F]
+	,testPutFloat putFloat64le (-1.0 :: Double) [0, 0, 0, 0, 0, 0, 0xF0, 0xBF]
+	
+	-- Denormalized
+	,testPutFloat putFloat32be (1.1754942106924411e-38 :: Float) [0, 0x7F, 0xFF, 0xFF]
+	,testPutFloat putFloat32le (1.1754942106924411e-38 :: Float) [0xFF, 0xFF, 0x7F, 0]
+	
+	,testPutFloat putFloat32be (-1.1754942106924411e-38 :: Float) [0x80, 0x7F, 0xFF, 0xFF]
+	,testPutFloat putFloat32le (-1.1754942106924411e-38 :: Float) [0xFF, 0xFF, 0x7F, 0x80]
+	
+	,testPutFloat putFloat64be (2.2250738585072009e-308 :: Double) [0, 0x0F, 0xFF, 0xFF, 0xFF, 0xFF, 0x0FF, 0xFF]
+	,testPutFloat putFloat64le (2.2250738585072009e-308 :: Double) [0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x0F, 0]
+	
+	,testPutFloat putFloat64be (-2.2250738585072009e-308 :: Double) [0x80, 0x0F, 0xFF, 0xFF, 0xFF, 0xFF, 0x0FF, 0xFF]
+	,testPutFloat putFloat64le (-2.2250738585072009e-308 :: Double) [0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x0F, 0x80]
+	]
+		where testPutFloat f x expected = expected ~=? result
+			where result = LB.unpack . runPut $ f x
+
+floatComponentsTests = "floatComponentsTests" ~: TestList [
+	-- 0 and -0
+	 testComponents 4 ( 0.0 :: Float) (False, 0, 0)
+	,testComponents 4 (-0.0 :: Float) (True, 0, 0)
+	
+	,testComponents 8 ( 0.0 :: Double) (False, 0, 0)
+	,testComponents 8 (-0.0 :: Double) (True, 0, 0)
+	
+	-- 1 and -1
+	,testComponents 4 ( 1.0 :: Float) (False, 0, 127)
+	,testComponents 4 (-1.0 :: Float) (True, 0, 127)
+	
+	,testComponents 8 ( 1.0 :: Double) (False, 0, 1023)
+	,testComponents 8 (-1.0 :: Double) (True, 0, 1023)
+	
+	-- Denormalized
+	,testComponents 4 (1.1754942106924411e-38 :: Float) (False, 8388607, 0)
+	,testComponents 8 (2.2250738585072009e-308 :: Double) (False, 4503599627370495, 0)
+	
+	]
+		where testComponents width x expected = expected ~=? result
+			where result = floatComponents width x
+
+biasTests = "biasTests" ~: TestList [
+	 testBias (-127, 8) 0
+	,testBias (0, 8) 127
+	,testBias (127, 8) 254
+	,testBias (128, 8) 255
+	]
+		where testBias (e, eWidth) expected = expected ~=? (bias e eWidth)
+
+encodeIntBETests = "encodeIntBETests" ~: TestList [
+	 testEncode 1 0 [0]
+	,testEncode 4 0 [0, 0, 0, 0]
+	,testEncode 4 1 [0, 0, 0, 0x01]
+	,testEncode 4 300 [0, 0, 0x01, 0x2C]
+	]
+		where testEncode width x expected = expected ~=? (encodeIntBE width x)
+
+encodeIntLETests = "encodeIntLETests" ~: TestList [
+	 testEncode 1 0 [0]
+	,testEncode 4 0 [0, 0, 0, 0]
+	,testEncode 4 1 [0x01, 0, 0, 0]
+	,testEncode 4 300 [0x2C, 0x01, 0, 0]
+	]
+		where testEncode width x expected = expected ~=? (encodeIntLE width x)
+
+floatToMergedTests = "floatToWordsTests" ~: TestList [
+	 testToMerged 4 0.0 0
+	]
+		where testToMerged width v expected = expected ~=? (floatToMerged width v)
+
+mergeFloatBitsTests = "mergeFloatBitsTests" ~: TestList [
+	 testMerge 2 3 (False, 0, 0)    0
+	,testMerge 2 3 (True,  0, 0) 0x20
+	
+	,testMerge 2 3 (False, 2, 3) 0x0E
+	,testMerge 2 3 (True,  2, 3) 0x2E
+	]
+		where testMerge fWidth eWidth (s, f, e) expected = expected ~=? (mergeFloatBits fWidth eWidth s f e)
 
 main = do
 	runTestTT allTests
