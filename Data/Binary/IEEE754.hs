@@ -153,6 +153,7 @@ encodeIntBE width x = (encodeIntBE (width - 1) (x `shiftR` 8)) ++ [step]
 encodeIntLE :: ByteCount -> Integer -> [Word8]
 encodeIntLE width x = reverse (encodeIntBE width x)
 
+bias :: (Integral a, Integral b) => a -> b -> a
 bias e eWidth = e - (1 - (2 `iExp` (eWidth - 1)))
 
 ---------------------------------------------------------------------
