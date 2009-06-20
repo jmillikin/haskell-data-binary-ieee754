@@ -71,22 +71,22 @@ parseFloatLE :: (RealFloat a) => [Word8] -> a
 parseFloatLE = parseFloat . reverse
 
 getFloat16be :: Get Float
-getFloat16be = getFloat 2 parseFloatBE
+getFloat16be = getFloat (ByteCount 2) parseFloatBE
 
 getFloat16le :: Get Float
-getFloat16le = getFloat 2 parseFloatLE
+getFloat16le = getFloat (ByteCount 2) parseFloatLE
 
 getFloat32be :: Get Float
-getFloat32be = getFloat 4 parseFloatBE
+getFloat32be = getFloat (ByteCount 4) parseFloatBE
 
 getFloat32le :: Get Float
-getFloat32le = getFloat 4 parseFloatLE
+getFloat32le = getFloat (ByteCount 4) parseFloatLE
 
 getFloat64be :: Get Double
-getFloat64be = getFloat 8 parseFloatBE
+getFloat64be = getFloat (ByteCount 8) parseFloatBE
 
 getFloat64le :: Get Double
-getFloat64le = getFloat 8 parseFloatLE
+getFloat64le = getFloat (ByteCount 8) parseFloatLE
 
 -- |Parse a floating-point value of the given width (in bytes) from within
 -- a Get monad.
@@ -98,16 +98,16 @@ getFloat (ByteCount width) parser = do
 ---------------------------------------------------------------------
 
 putFloat32be :: Float -> Put
-putFloat32be x = putFloat 4 encodeIntBE x
+putFloat32be x = putFloat (ByteCount 4) encodeIntBE x
 
 putFloat32le :: Float -> Put
-putFloat32le x = putFloat 4 encodeIntLE x
+putFloat32le x = putFloat (ByteCount 4) encodeIntLE x
 
 putFloat64be :: Double -> Put
-putFloat64be x = putFloat 8 encodeIntBE x
+putFloat64be x = putFloat (ByteCount 8) encodeIntBE x
 
 putFloat64le :: Double -> Put
-putFloat64le x = putFloat 8 encodeIntLE x
+putFloat64le x = putFloat (ByteCount 8) encodeIntLE x
 
 putFloat :: (RealFloat a) => ByteCount -> (ByteCount -> Integer -> [Word8]) -> a -> Put
 putFloat width f v = putByteString $ B.pack words'
@@ -203,7 +203,7 @@ mergeFloat :: Exponent -> Fraction -> BitCount -> (Integer, Int)
 mergeFloat 0 0 _ = (0, 0)
 
 mergeFloat e f width
-	-- Infinity / NaN (TODO
+	-- Infinity / NaN (TODO)
 	| e == eMax = error "Infinity/NaN not supported"
 	
 	| otherwise = case e of
