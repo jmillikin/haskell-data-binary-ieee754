@@ -1,15 +1,21 @@
-Name: data-binary-ieee754
-Version: 0.2
-Synopsis: Parser/Serializer for IEEE-754 floating-point values
-Description: Convert Float and Decimal values to/from raw octets.
-License: GPL
-License-file: License.txt
-Author: John Millikin
+name: data-binary-ieee754
+version: 0.3
+synopsis: Parser/Serializer for IEEE-754 floating-point values
+description: Convert Float and Decimal values to/from raw octets.
+license: GPL
+license-file: License.txt
+author: John Millikin
 maintainer: jmillikin@gmail.com
-Build-Type: Simple
-Cabal-Version: >=1.2
-Category: Data
+build-type: Simple
+cabal-version: >=1.6
+category: Data
+stability: experimental
+bug-reports: mailto:jmillikin@gmail.com
 
-Library
-  Build-Depends: base >=3 && < 5, binary, bytestring
-  Exposed-modules: Data.Binary.IEEE754
+source-repository head
+  type: bzr
+  location: bzr+ssh://bazaar.launchpad.net/~jmillikin/%2Bjunk/data-binary-ieee754/
+
+library
+  build-depends: base >=3 && < 5, binary, bytestring
+  exposed-modules: Data.Binary.IEEE754
