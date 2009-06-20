@@ -14,6 +14,7 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 -}
 
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module Data.Binary.IEEE754 (
 	-- * Parsing
 	 parseFloatBE, parseFloatLE
@@ -48,9 +49,10 @@ module Data.Binary.IEEE754 (
 	,Exponent
 	,Fraction
 	,BitCount
+	,ByteCount
 ) where
 
-import Data.Bits ((.&.), (.|.), shiftL, shiftR)
+import Data.Bits ((.&.), (.|.), shiftL, shiftR, Bits)
 import Data.Word (Word8)
 import Data.List (foldl')
 
@@ -89,7 +91,7 @@ getFloat64le = getFloat 8 parseFloatLE
 -- |Parse a floating-point value of the given width (in bytes) from within
 -- a Get monad.
 getFloat :: (RealFloat a) => ByteCount -> ([Word8] -> a) -> Get a
-getFloat width parser = do
+getFloat (ByteCount width) parser = do
 	bytes <- getByteString width
 	(return . parser . B.unpack) bytes
 
@@ -108,44 +110,44 @@ putFloat64le :: (RealFloat a) => a -> Put
 putFloat64le = putFloat 8 encodeIntLE
 
 putFloat :: (RealFloat a) => ByteCount -> (ByteCount -> Integer -> [Word8]) -> a -> Put
-putFloat width f v = putByteString $ B.pack words
-	where words = f width (floatToMerged width v)
+putFloat width f v = putByteString $ B.pack words'
+	where words' = f width (floatToMerged width v)
 
 floatComponents :: (RealFloat a) => ByteCount -> a -> (Bool, Fraction, Exponent)
 floatComponents width v =
 	case (dFraction, dExponent, biasedE) of
 		(0, 0, _) -> (sign, 0, 0)
 		(_, _, 0) -> (sign, truncatedFraction + 1, 0)
-		otherwise -> (sign, truncatedFraction, biasedE)
-	where dFraction   = fst (decodeFloat v)
-	      dExponent   = snd (decodeFloat v)
-	      eWidth      = exponentWidth (width * 8)
-	      fWidth      = (width * 8) - eWidth - 1 -- 1 for sign bit
-	      biasedE     = bias (dExponent + fWidth) eWidth
+		_         -> (sign, truncatedFraction, biasedE)
+	where dFraction   = Fraction $ fst (decodeFloat v)
+	      dExponent   = Exponent $ snd (decodeFloat v)
+	      eWidth      = exponentWidth (bitCount width)
+	      fWidth      = (bitCount width) - eWidth - 1 -- 1 for sign bit
+	      biasedE     = bias (dExponent + (fromIntegral fWidth)) eWidth
 	      absFraction = abs dFraction
 	
 	      -- Weird check is for detecting -0.0
 	      sign        = (1.0 / v) < 0.0
 	
 	      -- Fraction needs to be truncated, depending on the exponent
-	      truncatedFraction = absFraction - (1 `shiftL` fWidth)
+	      truncatedFraction = absFraction - (1 `bitShiftL` fWidth)
 
 floatToMerged :: (RealFloat a) => ByteCount -> a -> Integer
 floatToMerged width v = mergeFloatBits' (floatComponents width v)
 	where mergeFloatBits' (s, f, e) = mergeFloatBits fWidth eWidth s f e
-	      eWidth      = exponentWidth (width * 8)
-	      fWidth      = (width * 8) - eWidth - 1 -- 1 for sign bit
+	      eWidth      = exponentWidth (bitCount width)
+	      fWidth      = (bitCount width) - eWidth - 1 -- 1 for sign bit
 
 mergeFloatBits :: BitCount -> BitCount -> Bool -> Fraction -> Exponent -> Integer
 mergeFloatBits fWidth eWidth s f e = shiftedSign .|. shiftedFrac .|. shiftedExp
 	where sBit = (if s then 1 else 0) :: Integer
-	      shiftedSign = (sBit `shiftL` (fWidth + eWidth)) :: Integer
-	      shiftedExp  = ((fromIntegral e) `shiftL` fWidth) :: Integer
-	      shiftedFrac = f
+	      shiftedSign = (sBit `bitShiftL` (fWidth + eWidth)) :: Integer
+	      shiftedExp  = ((fromIntegral e) `bitShiftL` fWidth) :: Integer
+	      shiftedFrac = fromIntegral f
 
 -- |Encode an integer to a list of words, in big-endian format
 encodeIntBE :: ByteCount -> Integer -> [Word8]
-encodeIntBE 0     x = []
+encodeIntBE 0     _ = []
 encodeIntBE width x = (encodeIntBE (width - 1) (x `shiftR` 8)) ++ [step]
 	where step = (fromIntegral x) .&. 0xFF
 
@@ -153,7 +155,7 @@ encodeIntBE width x = (encodeIntBE (width - 1) (x `shiftR` 8)) ++ [step]
 encodeIntLE :: ByteCount -> Integer -> [Word8]
 encodeIntLE width x = reverse (encodeIntBE width x)
 
-bias :: (Integral a, Integral b) => a -> b -> a
+bias :: Exponent -> BitCount -> Exponent
 bias e eWidth = e - (1 - (2 `iExp` (eWidth - 1)))
 
 ---------------------------------------------------------------------
@@ -163,19 +165,19 @@ parseFloat bs = merge' (splitRawIEEE754 bs)
 	where merge'  (sign, e, f) = encode' (mergeFloat e f width) * signFactor sign
 	      encode' (f, e)       = encodeFloat f e
 	      signFactor s         = if s then (-1) else 1
-	      width                = length bs * 8
+	      width                = bitsInWord8 bs
 
 -- |Considering a byte list as a sequence of bits, slice it from start
 -- inclusive to end exclusive, and return the resulting bit sequence as an
 -- integer
 bitSlice :: [Word8] -> BitCount -> BitCount -> Integer
-bitSlice bs = sliceInt (foldl' step 0 bs) bitCount
+bitSlice bs = sliceInt (foldl' step 0 bs) bitCount'
 	where step acc w     = (shiftL acc 8) + (fromIntegral w)
-	      bitCount       = ((length bs) * 8)
+	      bitCount'      = bitsInWord8 bs
 
 -- |Slice a single integer by start and end bit location
 sliceInt :: Integer -> BitCount -> BitCount -> BitCount -> Integer
-sliceInt x xBitCount s e = fromIntegral $ (x .&. startMask) `shiftR` (xBitCount - e)
+sliceInt x xBitCount s e = fromIntegral $ (x .&. startMask) `bitShiftR` (xBitCount - e)
 	where startMask = n1Bits (xBitCount - s)
 	      n1Bits n  = (2 `iExp` n) - 1
 
@@ -183,11 +185,11 @@ sliceInt x xBitCount s e = fromIntegral $ (x .&. startMask) `shiftR` (xBitCount 
 -- components have not been processed (unbiased, added significant bit,
 -- etc).
 splitRawIEEE754 :: [Word8] -> (Bool, Exponent, Fraction)
-splitRawIEEE754 bs = (sign, exp, frac)
+splitRawIEEE754 bs = (sign, exp', frac)
 	where sign = (head bs .&. 0x80) == 0x80
-	      exp  = fromIntegral $ bitSlice bs 1 (1 + w)
-	      frac = bitSlice bs (1 + w) (length bs * 8)
-	      w    = exponentWidth $ length bs * 8
+	      exp' = Exponent (fromIntegral $ bitSlice bs 1 (1 + w))
+	      frac = Fraction (bitSlice bs (1 + w) (bitsInWord8 bs))
+	      w    = exponentWidth $ bitsInWord8 bs
 
 -- |Unbias an exponent
 unbias :: Exponent -> BitCount -> Exponent
@@ -206,10 +208,10 @@ mergeFloat e f width
 	
 	| otherwise = case e of
 		-- Denormalized
-		0 -> (f, (-fWidth) + (unbiasedE + 1))
+		0 -> (fromIntegral f, (fromIntegral unbiasedE + 1) - (fromIntegral fWidth))
 		
 		-- Normalized
-		_ -> (f + (1 `shiftL` fWidth), (-fWidth) + unbiasedE)
+		_ -> (fromIntegral f + (1 `bitShiftL` fWidth), (fromIntegral unbiasedE) - (fromIntegral fWidth))
 		
 		where eWidth    = exponentWidth width
 		      fWidth    = width - eWidth - 1
@@ -224,16 +226,33 @@ exponentWidth :: BitCount -> BitCount
 exponentWidth k
 	| k == 16         = 5
 	| k == 32         = 8
-	| k `mod` 32 == 0 = ceiling (4 * (log2 k)) - 13
+	| k `mod` 32 == 0 = ceiling (4 * (logBase 2 (fromIntegral k))) - 13
 	| otherwise       = error "Invalid length of floating-point value"
 
--- |Base-2 log of an integer
-log2 = (logBase 2) . fromIntegral
-
 -- |Integral exponent
+iExp :: (Integral a, Integral b, Integral c) => a -> b -> c
 iExp b e = floor $ (fromIntegral b) ** (fromIntegral e)
 
-type Exponent = Int
-type Fraction = Integer
-type BitCount = Int
-type ByteCount = Int
+newtype Exponent = Exponent Int
+	deriving (Show, Eq, Num, Ord, Real, Enum, Integral, Bits)
+
+newtype Fraction = Fraction Integer
+	deriving (Show, Eq, Num, Ord, Real, Enum, Integral, Bits)
+
+newtype BitCount = BitCount Int
+	deriving (Show, Eq, Num, Ord, Real, Enum, Integral)
+
+newtype ByteCount = ByteCount Int
+	deriving (Show, Eq, Num, Ord, Real, Enum, Integral)
+
+bitCount :: ByteCount -> BitCount
+bitCount (ByteCount x) = BitCount (x * 8)
+
+bitsInWord8 :: [Word8] -> BitCount
+bitsInWord8 ws = bitCount (ByteCount (length ws))
+
+bitShiftL :: (Bits a) => a -> BitCount -> a
+bitShiftL x (BitCount n) = shiftL x n
+
+bitShiftR :: (Bits a) => a -> BitCount -> a
+bitShiftR x (BitCount n) = shiftR x n
