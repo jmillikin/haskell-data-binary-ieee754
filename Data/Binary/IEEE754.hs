@@ -97,17 +97,17 @@ getFloat (ByteCount width) parser = do
 
 ---------------------------------------------------------------------
 
-putFloat32be :: (RealFloat a) => a -> Put
-putFloat32be = putFloat 4 encodeIntBE
+putFloat32be :: Float -> Put
+putFloat32be x = putFloat 4 encodeIntBE x
 
-putFloat32le :: (RealFloat a) => a -> Put
-putFloat32le = putFloat 4 encodeIntLE
+putFloat32le :: Float -> Put
+putFloat32le x = putFloat 4 encodeIntLE x
 
-putFloat64be :: (RealFloat a) => a -> Put
-putFloat64be = putFloat 8 encodeIntBE
+putFloat64be :: Double -> Put
+putFloat64be x = putFloat 8 encodeIntBE x
 
-putFloat64le :: (RealFloat a) => a -> Put
-putFloat64le = putFloat 8 encodeIntLE
+putFloat64le :: Double -> Put
+putFloat64le x = putFloat 8 encodeIntLE x
 
 putFloat :: (RealFloat a) => ByteCount -> (ByteCount -> Integer -> [Word8]) -> a -> Put
 putFloat width f v = putByteString $ B.pack words'
