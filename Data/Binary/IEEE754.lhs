@@ -18,39 +18,13 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module Data.Binary.IEEE754 (
 	-- * Parsing
-	 parseFloatBE, parseFloatLE
-	
-	,getFloat16be, getFloat16le
-	,getFloat32be, getFloat32le
-	,getFloat64be, getFloat64le
-	
-	,getFloat
+	  getFloat16be, getFloat16le
+	, getFloat32be, getFloat32le
+	, getFloat64be, getFloat64le
 	
 	-- * Serializing
-	,putFloat32be, putFloat32le
-	,putFloat64be, putFloat64le
-	
-	,putFloat
-	
-	-- * Parser implementation
-	,exponentWidth
-	,bitSlice
-	,splitRawIEEE754
-	,unbias
-	,mergeFloat
-	
-	-- * Serializer implementation
-	,bias
-	,encodeIntBE, encodeIntLE
-	,floatToMerged
-	,mergeFloatBits
-	,floatComponents
-	
-	-- * Useful type aliases
-	,Exponent
-	,Fraction
-	,BitCount
-	,ByteCount
+	, putFloat32be, putFloat32le
+	, putFloat64be, putFloat64le
 ) where
 
 import Data.Bits ((.&.), (.|.), shiftL, shiftR, Bits)
