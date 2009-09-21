@@ -1,19 +1,20 @@
-{- Copyright (C) 2009 John Millikin <jmillikin@gmail.com>
-   
-   This program is free software: you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation, either version 3 of the License, or
-   any later version.
-   
-   This program is distributed in the hope that it will be useful,
-   but WITHOUT ANY WARRANTY; without even the implied warranty of
-   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
-   
-   You should have received a copy of the GNU General Public License
-   along with this program.  If not, see <http://www.gnu.org/licenses/>.
--}
+% Copyright (C) 2009 John Millikin <jmillikin@gmail.com>
+% 
+% This program is free software: you can redistribute it and/or modify
+% it under the terms of the GNU General Public License as published by
+% the Free Software Foundation, either version 3 of the License, or
+% any later version.
+% 
+% This program is distributed in the hope that it will be useful,
+% but WITHOUT ANY WARRANTY; without even the implied warranty of
+% MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+% GNU General Public License for more details.
+% 
+% You should have received a copy of the GNU General Public License
+% along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+\ignore{
+\begin{code}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module Data.Binary.IEEE754 (
 	-- * Parsing
@@ -59,9 +60,10 @@ import Data.List (foldl')
 import qualified Data.ByteString as B
 import Data.Binary.Get (Get, getByteString)
 import Data.Binary.Put (Put, putByteString)
+\end{code}
+}
 
----------------------------------------------------------------------
-
+\begin{code}
 -- |Parse a big-endian byte list into a floating-point value.
 parseFloatBE :: (RealFloat a) => [Word8] -> a
 parseFloatBE = parseFloat
@@ -94,9 +96,9 @@ getFloat :: (RealFloat a) => ByteCount -> ([Word8] -> a) -> Get a
 getFloat (ByteCount width) parser = do
 	bytes <- getByteString width
 	(return . parser . B.unpack) bytes
+\end{code}
 
----------------------------------------------------------------------
-
+\begin{code}
 putFloat32be :: Float -> Put
 putFloat32be x = putFloat (ByteCount 4) encodeIntBE x
 
@@ -157,9 +159,9 @@ encodeIntLE width x = reverse (encodeIntBE width x)
 
 bias :: Exponent -> BitCount -> Exponent
 bias e eWidth = e - (1 - (2 `iExp` (eWidth - 1)))
+\end{code}
 
----------------------------------------------------------------------
-
+\begin{code}
 parseFloat :: (RealFloat a) => [Word8] -> a
 parseFloat bs = merge' (splitRawIEEE754 bs)
 	where merge'  (sign, e, f) = encode' (mergeFloat e f width) * signFactor sign
@@ -217,9 +219,9 @@ mergeFloat e f width
 		      fWidth    = width - eWidth - 1
 		      eMax      = (2 `iExp` eWidth) - 1
 		      unbiasedE = unbias e (eWidth)
+\end{code}
 
----------------------------------------------------------------------
-
+\begin{code}
 -- |Calculate the proper size of the exponent field, in bits, given the
 -- size of the full structure.
 exponentWidth :: BitCount -> BitCount
@@ -256,3 +258,4 @@ bitShiftL x (BitCount n) = shiftL x n
 
 bitShiftR :: (Bits a) => a -> BitCount -> a
 bitShiftR x (BitCount n) = shiftR x n
+\end{code}

@@ -1,0 +1,38 @@
+\documentclass[12pt]{article}
+
+\usepackage{color}
+\usepackage{hyperref}
+\usepackage{textcomp}
+
+% Smaller margins
+\usepackage[left=1.5cm,top=2cm,right=1.5cm,nohead,nofoot]{geometry}
+
+% Remove boxes from hyperlinks
+\hypersetup{
+    colorlinks,
+    linkcolor=blue,
+}
+
+\usepackage{listings}
+\lstnewenvironment{code}{
+	\lstset
+		{language=Haskell
+		,basicstyle=\footnotesize\tt
+		,showstringspaces=false
+		,frame=single
+		,upquote=true
+		}}
+		{}
+
+\long\def\ignore#1{}
+
+\makeindex
+
+\begin{document}
+
+%\addcontentsline{toc}{section}{Contents}
+%\tableofcontents
+
+\input{Data/Binary/IEEE754.lhs}
+
+\end{document}
