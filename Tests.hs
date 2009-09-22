@@ -133,7 +133,7 @@ props_PutFloat32 = let check = checkPut putFloat32be putFloat32le in
 	
 	-- Infinity
 	, check [0x7F, 0x80, 0, 0]   inf32
-	, check [0x7F, 0x80, 0, 0] (-inf32)
+	, check [0xFF, 0x80, 0, 0] (-inf32)
 	
 	-- NaN
 	, check [0x7F, 0xC0, 0, 0]   nan32
