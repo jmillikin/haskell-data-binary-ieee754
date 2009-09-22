@@ -161,15 +161,14 @@ props_PutFloat64 = let check = checkPut putFloat64be putFloat64le in
 	, check [0xFF, 0xF8, 0, 0, 0, 0, 0, 0] (-nan64)
 	]
 
-checkGet :: Eq a => Get a -> Get a -> [Word8] -> (a -> Bool) -> Bool
-checkGet getBE getLE bytes f = valid where
-	valid = sameResult && B.null remainingBE && f xBE
-	sameResult = remainingBE == remainingLE && xBE == xLE
+checkGet :: (Show a, Eq a, RealFloat a) => Get a -> Get a -> [Word8] -> (a -> Bool) -> Property
+checkGet getBE getLE bytes f = forAll (return bytes) (const valid) where
+	valid = B.null remainingBE && B.null remainingLE && f xBE && f xLE
 	(xBE, remainingBE, _) = runGetState getBE (B.pack bytes) 0
 	(xLE, remainingLE, _) = runGetState getLE (B.pack (reverse bytes)) 0
 
-checkPut :: (a -> Put) -> (a -> Put) -> [Word8] -> a -> Bool
-checkPut putBE putLE bytes x = valid where
+checkPut :: Show a => (a -> Put) -> (a -> Put) -> [Word8] -> a -> Property
+checkPut putBE putLE bytes x = forAll (return x) (const valid) where
 	valid = sameResult && bytes == B.unpack bytesBE
 	sameResult = bytesBE == (B.reverse bytesLE)
 	bytesBE = runPut (putBE x)
