@@ -1,6 +1,6 @@
 name: data-binary-ieee754
 version: 0.3
-synopsis: Parser/Serializer for IEEE-754 floating-point values
+synopsis: Parser/Serialiser for IEEE-754 floating-point values
 description: Convert Float and Decimal values to/from raw octets.
 license: GPL
 license-file: License.txt

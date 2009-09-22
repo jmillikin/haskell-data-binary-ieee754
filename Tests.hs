@@ -60,11 +60,11 @@ props_GetFloat16 = let check = checkGet getFloat16be getFloat16le in
 	[ check [0, 0]    (and' (== 0.0) (not . isNegativeZero))
 	, check [0x80, 0] isNegativeZero
 	
-	-- Normalized
+	-- Normalised
 	, check [0x3C, 0] (==  1.0)
 	, check [0xBC, 0] (== -1.0)
 	
-	-- Denormalized
+	-- Denormalised
 	, check [0x03, 0xFF] (==  6.097555e-5)
 	, check [0x83, 0xFF] (== -6.097555e-5)
 	
@@ -81,11 +81,11 @@ props_GetFloat32 = let check = checkGet getFloat32be getFloat32le in
 	[ check [0, 0, 0, 0]    (and' (== 0.0) (not . isNegativeZero))
 	, check [0x80, 0, 0, 0] isNegativeZero
 	
-	-- Normalized
+	-- Normalised
 	, check [0x3F, 0x80, 0, 0] (==  1.0)
 	, check [0xBF, 0x80, 0, 0] (== -1.0)
 	
-	-- Denormalized
+	-- Denormalised
 	, check [0x00, 0x7F, 0xFF, 0xFF] (==  1.1754942106924411e-38)
 	, check [0x80, 0x7F, 0xFF, 0xFF] (== -1.1754942106924411e-38)
 	
@@ -102,11 +102,11 @@ props_GetFloat64 = let check = checkGet getFloat64be getFloat64le in
 	[ check [0, 0, 0, 0, 0, 0, 0, 0]    (and' (== 0.0) (not . isNegativeZero))
 	, check [0x80, 0, 0, 0, 0, 0, 0, 0] isNegativeZero
 	
-	-- Normalized
+	-- Normalised
 	, check [0x3F, 0xF0, 0, 0, 0, 0, 0, 0] (==  1.0)
 	, check [0xBF, 0xF0, 0, 0, 0, 0, 0, 0] (== -1.0)
 	
-	-- Denormalized
+	-- Denormalised
 	, check [0x00, 0x0F, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF] (==  2.2250738585072009e-308)
 	, check [0x80, 0x0F, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF] (== -2.2250738585072009e-308)
 	
@@ -123,11 +123,11 @@ props_PutFloat32 = let check = checkPut putFloat32be putFloat32le in
 	[ check [0, 0, 0, 0]   0.0
 	, check [0x80, 0, 0, 0] (-0.0)
 	
-	-- Normalized
+	-- Normalised
 	, check [0x3F, 0x80, 0, 0]   1.0
 	, check [0xBF, 0x80, 0, 0] (-1.0)
 	
-	-- Denormalized
+	-- Denormalised
 	, check [0x00, 0x7F, 0xFF, 0xFF]   1.1754942106924411e-38
 	, check [0x80, 0x7F, 0xFF, 0xFF] (-1.1754942106924411e-38)
 	
@@ -144,11 +144,11 @@ props_PutFloat64 = let check = checkPut putFloat64be putFloat64le in
 	[ check [0, 0, 0, 0, 0, 0, 0, 0]      0.0
 	, check [0x80, 0, 0, 0, 0, 0, 0, 0] (-0.0)
 	
-	-- Normalized
+	-- Normalised
 	, check [0x3F, 0xF0, 0, 0, 0, 0, 0, 0]   1.0
 	, check [0xBF, 0xF0, 0, 0, 0, 0, 0, 0] (-1.0)
 	
-	-- Denormalized
+	-- Denormalised
 	, check [0x00, 0x0F, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF]   2.2250738585072009e-308
 	, check [0x80, 0x0F, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF] (-2.2250738585072009e-308)
 	
