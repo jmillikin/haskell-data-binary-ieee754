@@ -73,8 +73,8 @@ props_GetFloat16 = let check = checkGet getFloat16be getFloat16le in
 	, check [0xFC, 0] (== -inf32)
 	
 	-- NaN
-	, check [0x7E, 0] isNaN
-	, check [0xFE, 0] isNaN
+	, check [0x7E, 0] (and' isNaN (not . isNegativeNaN))
+	, check [0xFE, 0] isNegativeNaN
 	]
 
 props_GetFloat32 = let check = checkGet getFloat32be getFloat32le in
@@ -94,8 +94,8 @@ props_GetFloat32 = let check = checkGet getFloat32be getFloat32le in
 	, check [0xFF, 0x80, 0, 0] (== -inf32)
 	
 	-- NaN and negative NaN
-	, check [0x7F, 0xC0, 0, 0] isNaN
-	, check [0xFF, 0xC0, 0, 0] isNaN
+	, check [0x7F, 0xC0, 0, 0] (and' isNaN (not . isNegativeNaN))
+	, check [0xFF, 0xC0, 0, 0] isNegativeNaN
 	]
 
 props_GetFloat64 = let check = checkGet getFloat64be getFloat64le in
