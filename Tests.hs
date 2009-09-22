@@ -180,7 +180,7 @@ and' f g x = f x && g x
 isNegativeNaN :: RealFloat a => a -> Bool
 isNegativeNaN x = isNaN x && (floor x > 0)
 
--- Verify that the given put and get functions 
+-- Verify that the given put and get functions are inverses.
 passthrough :: Eq a => (a -> Put) -> Get a -> a -> Bool
 passthrough put get x = x == x' && B.null remaining where
 	bytes = runPut (put x)
