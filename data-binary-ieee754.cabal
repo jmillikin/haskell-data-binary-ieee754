@@ -1,5 +1,5 @@
 name: data-binary-ieee754
-version: 0.3
+version: 0.4
 synopsis: Parser/Serialiser for IEEE-754 floating-point values
 description: Convert Float and Decimal values to/from raw octets.
 license: GPL
@@ -13,8 +13,8 @@ stability: experimental
 bug-reports: mailto:jmillikin@gmail.com
 
 source-repository head
-  type: bzr
-  location: bzr+ssh://bazaar.launchpad.net/~jmillikin/%2Bjunk/data-binary-ieee754/
+  type: darcs
+  location: http://patch-tag.com/r/data-binary-ieee754/pullrepo
 
 library
   build-depends: base >=3 && < 5, binary, bytestring
