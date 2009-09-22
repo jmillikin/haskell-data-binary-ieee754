@@ -73,30 +73,14 @@ getFloat64le = getFloat (ByteCount 8) $ splitBytes . reverse
 
 \subsection{Implementation}
 
-\subsubsection{Raw float components}
-
-Information about the raw bit patterns in the float is stored in
-{\tt RawFloat}, so they don't have to be passed around to the various
-format cases.
-
-\begin{code}
-data RawFloat = RawFloat
-	{ rawSign             :: Sign
-	, rawExponent         :: Exponent
-	, rawSignificand      :: Significand
-	, rawExponentWidth    :: BitCount
-	, rawSignificandWidth :: BitCount
-	}
-	deriving (Show)
-\end{code}
-
 Split the raw byte array into (sign, exponent, significand) components.
 The exponent and signifcand are drawn directly from the bits in the
 original float, and have not been unbiased or otherwise modified.
 
 \begin{code}
 splitBytes :: [Word8] -> RawFloat
-splitBytes bs = RawFloat sign exp' sig expWidth sigWidth where
+splitBytes bs = RawFloat width sign exp' sig expWidth sigWidth where
+	width = ByteCount (length bs)
 	nBits = bitsInWord8 bs
 	sign = if head bs .&. 0x80 == 0x80
 		then Negative
@@ -138,7 +122,7 @@ are constructed using the {\tt Read} instances for {\tt Double} and
 
 \begin{code}
 merge :: (Read a, RealFloat a) => RawFloat -> a
-merge f@(RawFloat _ e sig eWidth _)
+merge f@(RawFloat _ _ e sig eWidth _)
 	| e == 0 = if sig == 0
 		then 0.0
 		else denormalised f
@@ -199,86 +183,130 @@ getFloat (ByteCount width) parser = do
 
 \begin{code}
 putFloat32be :: Float -> Put
-putFloat32be = putFloat (ByteCount 4) encodeIntBE
+putFloat32be = putFloat (ByteCount 4) id
 \end{code}
 
 \begin{code}
 putFloat32le :: Float -> Put
-putFloat32le = putFloat (ByteCount 4) encodeIntLE
+putFloat32le = putFloat (ByteCount 4) reverse
 \end{code}
 
 \begin{code}
 putFloat64be :: Double -> Put
-putFloat64be = putFloat (ByteCount 8) encodeIntBE
+putFloat64be = putFloat (ByteCount 8) id
 \end{code}
 
 \begin{code}
 putFloat64le :: Double -> Put
-putFloat64le = putFloat (ByteCount 8) encodeIntLE
+putFloat64le = putFloat (ByteCount 8) reverse
 \end{code}
 
 \subsection{Implementation}
 
-\begin{code}
-putFloat :: (RealFloat a) => ByteCount -> (ByteCount -> Integer -> [Word8]) -> a -> Put
-putFloat width f v = putByteString $ B.pack words' where
-	words' = f width (floatToMerged width v)
-\end{code}
+Serialisation is similar to parsing. First, the float is converted to
+a structure representing raw bitfields. The values returned from
+{\tt decodeFloat} are clamped to their expected lengths before being
+stored in the {\tt RawFloat}.
 
 \begin{code}
-floatComponents :: (RealFloat a) => ByteCount -> a -> (Bool, Significand, Exponent)
-floatComponents width v =
-	case (dFraction, dExponent, biasedE) of
-		(0, 0, _) -> (sign, 0, 0)
-		(_, _, 0) -> (sign, truncatedFraction + 1, 0)
-		_         -> (sign, truncatedFraction, biasedE)
-	where dFraction   = Significand $ fst (decodeFloat v)
-	      dExponent   = Exponent . fromIntegral $ snd (decodeFloat v)
-	      eWidth      = exponentWidth (bitCount width)
-	      fWidth      = bitCount width - eWidth - 1 -- 1 for sign bit
-	      biasedE     = bias (dExponent + fromIntegral fWidth) eWidth
-	      absFraction = abs dFraction
+splitFloat :: RealFloat a => ByteCount -> a -> RawFloat
+splitFloat width x = raw where
+	raw = RawFloat width sign clampedExp clampedSig expWidth sigWidth
+	sign = if isNegativeNaN x || isNegativeZero x || x < 0
+		then Negative
+		else Positive
+	clampedExp = clamp expWidth exp'
+	clampedSig = clamp sigWidth sig
+	(exp', sig) = case (dFraction, dExponent, biasedExp) of
+		(0, 0, _) -> (0, 0)
+		(_, _, 0) -> (0, Significand $ truncatedSig + 1)
+		_         -> (biasedExp, Significand truncatedSig)
+	expWidth = exponentWidth $ bitCount width
+	sigWidth = bitCount width - expWidth - 1 -- 1 for sign bit
 	
-	      -- Weird check is for detecting -0.0
-	      sign        = (1.0 / v) < 0.0
+	(dFraction, dExponent) = decodeFloat x
 	
-	      -- Fraction needs to be truncated, depending on the exponent
-	      truncatedFraction = absFraction - (1 `bitShiftL` fWidth)
+	rawExp = Exponent $ dExponent + fromIntegral sigWidth
+	biasedExp = bias rawExp expWidth
+	truncatedSig = (abs dFraction) - (1 `bitShiftL` sigWidth)
 \end{code}
 
+Then, the {\tt RawFloat} is converted to a list of bytes by mashing all
+the fields together into an {\tt Integer}, and chopping up that integer
+in 8-bit blocks.
+
 \begin{code}
-floatToMerged :: (RealFloat a) => ByteCount -> a -> Integer
-floatToMerged width v = mergeFloatBits' (floatComponents width v) where
-	mergeFloatBits' (s, f, e) = mergeFloatBits fWidth eWidth s f e
-	eWidth      = exponentWidth $ bitCount width
-	fWidth      = bitCount width - eWidth - 1 -- 1 for sign bit
+rawToBytes :: RawFloat -> [Word8]
+rawToBytes raw = integerToBytes mashed width where
+	RawFloat width sign exp' sig expWidth sigWidth = raw
+	sign' :: Word8
+	sign' = case sign of
+		Positive -> 0
+		Negative -> 1
+	mashed = mashBits sig sigWidth .
+	         mashBits exp' expWidth .
+	         mashBits sign' 1 $ 0
 \end{code}
 
+{\tt clamp}, given a maximum bit count and a value, will strip any 1-bits
+in positions above the count.
+
 \begin{code}
-mergeFloatBits :: BitCount -> BitCount -> Bool -> Significand -> Exponent -> Integer
-mergeFloatBits fWidth eWidth s f e = merged where
-	merged = shiftedSign .|. shiftedFrac .|. shiftedExp
-	sBit = if s then 1 else 0 :: Integer
-	shiftedSign = sBit `bitShiftL` (fWidth + eWidth) :: Integer
-	shiftedExp  = fromIntegral e `bitShiftL` fWidth :: Integer
-	shiftedFrac = fromIntegral f
+clamp :: Bits a => BitCount -> a -> a
+clamp = (.&.) . mask where
+	mask 1 = 1
+	mask n | n > 1 = (mask (n - 1) `shiftL` 1) + 1
+	mask _ = undefined
 \end{code}
 
-Encode an integer to a list of words, in big-endian format
+For merging the fields, just shift the starting integer over a bit and
+then \textsc{or} it with the next value. The weird parameter order allows
+easy composition.
 
 \begin{code}
-encodeIntBE :: ByteCount -> Integer -> [Word8]
-encodeIntBE 0     _ = []
-encodeIntBE width x = encoded where
-	encoded = encodeIntBE (width - 1) (x `shiftR` 8) ++ [step]
+mashBits :: (Bits a, Integral a) => a -> BitCount -> Integer -> Integer
+mashBits _ 0 x = x
+mashBits y n x = (x `bitShiftL` n) .|. fromIntegral y
+\end{code}
+
+Given an integer, read it in 255-block increments starting from the LSB.
+Each increment is converted to a byte and added to the final list.
+
+\begin{code}
+integerToBytes :: Integer -> ByteCount -> [Word8]
+integerToBytes _ 0 = []
+integerToBytes x n = bytes where
+	bytes = integerToBytes (x `shiftR` 8) (n - 1) ++ [step]
 	step = fromIntegral x .&. 0xFF
 \end{code}
 
-Encode an integer to a list of words, in little-endian format
+Finally, the raw parsing is wrapped up in {\tt Put}. The second parameter
+allows the same code paths to be used for little- and big-endian
+serialisation.
 
 \begin{code}
-encodeIntLE :: ByteCount -> Integer -> [Word8]
-encodeIntLE width = reverse . encodeIntBE width
+putFloat :: (RealFloat a) => ByteCount -> ([Word8] -> [Word8]) -> a -> Put
+putFloat width f x = putByteString $ B.pack bytes where
+	bytes = f . rawToBytes . splitFloat width $ x
+\end{code}
+
+\section{Raw float components}
+
+Information about the raw bit patterns in the float is stored in
+{\tt RawFloat}, so they don't have to be passed around to the various
+format cases. The exponent should be biased, and the significand
+shouldn't have it's implied MSB (if applicable).
+
+\begin{code}
+data RawFloat = RawFloat
+	{ rawWidth            :: ByteCount
+	, rawSign             :: Sign
+	, rawExponent         :: Exponent
+	, rawSignificand      :: Significand
+	, rawExponentWidth    :: BitCount
+	, rawSignificandWidth :: BitCount
+	}
+	deriving (Show)
 \end{code}
 
 \section{Exponents}
@@ -366,3 +394,9 @@ pow :: (Integral a, Integral b, Integral c) => a -> b -> c
 pow b e = floor $ fromIntegral b ** fromIntegral e
 \end{code}
 
+Detect whether a float is {\tt $-$NaN}
+
+\begin{code}
+isNegativeNaN :: RealFloat a => a -> Bool
+isNegativeNaN x = isNaN x && (floor x > 0)
+\end{code}
