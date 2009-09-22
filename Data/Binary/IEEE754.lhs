@@ -228,7 +228,7 @@ splitFloat width x = raw where
 	
 	rawExp = Exponent $ dExponent + fromIntegral sigWidth
 	biasedExp = bias rawExp expWidth
-	truncatedSig = (abs dFraction) - (1 `bitShiftL` sigWidth)
+	truncatedSig = abs dFraction - (1 `bitShiftL` sigWidth)
 \end{code}
 
 Then, the {\tt RawFloat} is converted to a list of bytes by mashing all

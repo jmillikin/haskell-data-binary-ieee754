@@ -170,7 +170,7 @@ checkGet getBE getLE bytes f = forAll (return bytes) (const valid) where
 checkPut :: Show a => (a -> Put) -> (a -> Put) -> [Word8] -> a -> Property
 checkPut putBE putLE bytes x = forAll (return x) (const valid) where
 	valid = sameResult && bytes == B.unpack bytesBE
-	sameResult = bytesBE == (B.reverse bytesLE)
+	sameResult = bytesBE == B.reverse bytesLE
 	bytesBE = runPut (putBE x)
 	bytesLE = runPut (putLE x)
 
