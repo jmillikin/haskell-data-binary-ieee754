@@ -43,108 +43,154 @@ import Data.Binary.Put (Put, putByteString)
 
 \begin{code}
 getFloat16be :: Get Float
-getFloat16be = getFloat (ByteCount 2) parseFloat
+getFloat16be = getFloat (ByteCount 2) split
 \end{code}
 
 \begin{code}
 getFloat16le :: Get Float
-getFloat16le = getFloat (ByteCount 2) $ parseFloat . reverse
+getFloat16le = getFloat (ByteCount 2) $ split . reverse
 \end{code}
 
 \begin{code}
 getFloat32be :: Get Float
-getFloat32be = getFloat (ByteCount 4) parseFloat
+getFloat32be = getFloat (ByteCount 4) split
 \end{code}
 
 \begin{code}
 getFloat32le :: Get Float
-getFloat32le = getFloat (ByteCount 4) $ parseFloat . reverse
+getFloat32le = getFloat (ByteCount 4) $ split . reverse
 \end{code}
 
 \begin{code}
 getFloat64be :: Get Double
-getFloat64be = getFloat (ByteCount 8) parseFloat
+getFloat64be = getFloat (ByteCount 8) split
 \end{code}
 
 \begin{code}
 getFloat64le :: Get Double
-getFloat64le = getFloat (ByteCount 8) $ parseFloat . reverse
+getFloat64le = getFloat (ByteCount 8) $ split . reverse
 \end{code}
 
 \subsection{Implementation}
 
-Parse a floating-point value of the given width (in bytes) from within
-a {\tt Get} monad.
+\subsubsection{Raw float components}
+
+Information about the raw bit patterns in the float is stored in
+{\tt RawFloat}, so they don't have to be passed around to the various
+format cases.
+
 \begin{code}
-getFloat :: RealFloat a => ByteCount -> ([Word8] -> a) -> Get a
-getFloat (ByteCount width) parser = fmap (parser . B.unpack) $ getByteString width
+data RawFloat = RawFloat
+	{ rawSign             :: Sign
+	, rawExponent         :: Exponent
+	, rawSignificand      :: Significand
+	, rawExponentWidth    :: BitCount
+	, rawSignificandWidth :: BitCount
+	}
+	deriving (Show)
 \end{code}
 
-\begin{code}
-parseFloat :: RealFloat a => [Word8] -> a
-parseFloat bs = merge' $ splitRawIEEE754 bs where
-	merge'  (sign, e, f) = encode' (mergeFloat e f width) * signFactor sign
-	encode' (f, e)       = encodeFloat f e
-	signFactor s         = if s then (-1) else 1
-	width                = bitsInWord8 bs
-\end{code}
-
-Considering a byte list as a sequence of bits, slice it from start
-inclusive to end exclusive, and return the resulting bit sequence as an
-integer.
+Split the raw byte array into (sign, exponent, significand) components.
+The exponent and signifcand are drawn directly from the bits in the
+original float, and have not been unbiased or otherwise modified.
 
 \begin{code}
-bitSlice :: [Word8] -> BitCount -> BitCount -> Integer
-bitSlice bs = sliceInt (foldl' step 0 bs) bitCount' where
-	step acc w     = shiftL acc 8 + fromIntegral w
-	bitCount'      = bitsInWord8 bs
-\end{code}
-
-Slice a single integer by start and end bit location
-
-\begin{code}
-sliceInt :: Integer -> BitCount -> BitCount -> BitCount -> Integer
-sliceInt x xBitCount s e = fromIntegral sliced where
-	sliced = (x .&. startMask) `bitShiftR` (xBitCount - e)
-	startMask = n1Bits (xBitCount - s)
-	n1Bits n  = (2 `pow` n) - 1
-\end{code}
-
-Split a raw bit array into (sign, exponent, fraction) components. These
-components have not been processed (unbiased, added significant bit,
-etc).
-
-\begin{code}
-splitRawIEEE754 :: [Word8] -> (Bool, Exponent, Fraction)
-splitRawIEEE754 bs = (sign, exp', frac) where
-	sign = (head bs .&. 0x80) == 0x80
-	exp' = Exponent (fromIntegral $ bitSlice bs 1 (1 + w))
-	frac = Fraction (bitSlice bs (1 + w) (bitsInWord8 bs))
-	w    = exponentWidth $ bitsInWord8 bs
-\end{code}
-
-Parse values into a form suitable for {\tt encodeFloat}.
-
-exponent fraction width-in-bits -> fraction, exponent.
-
-\begin{code}
-mergeFloat :: Exponent -> Fraction -> BitCount -> (Integer, Int)
-mergeFloat 0 0 _ = (0, 0)
-mergeFloat e f width
-	-- Infinity / NaN (TODO)
-	| e == eMax = error "Infinity/NaN not supported"
+split :: [Word8] -> RawFloat
+split bs = RawFloat sign exp' sig expWidth sigWidth where
+	nBits = bitsInWord8 bs
+	sign = if head bs .&. 0x80 == 0x80
+		then Negative
+		else Positive
 	
-	| otherwise = case e of
-		-- Denormalized
-		0 -> (fromIntegral f, fromIntegral unbiasedE + 1 - fromIntegral fWidth)
-		
-		-- Normalized
-		_ -> (fromIntegral f + (1 `bitShiftL` fWidth), fromIntegral unbiasedE - fromIntegral fWidth)
-		
-		where eWidth    = exponentWidth width
-		      fWidth    = width - eWidth - 1
-		      eMax      = (2 `pow` eWidth) - 1
-		      unbiasedE = unbias e eWidth
+	expStart = 1
+	expWidth = exponentWidth nBits
+	expEnd = expStart + expWidth
+	exp' = Exponent . fromIntegral $ bitSlice bs expStart expEnd
+	
+	sigWidth = nBits - expEnd
+	sig  = Significand $ bitSlice bs expEnd nBits
+\end{code}
+
+\subsubsection{Encodings and special values}
+
+The next step depends on the value of the exponent $e$, size of the
+exponent field in bits $w$, and value of the significand.
+
+\begin{table}[h]
+\begin{center}
+\begin{tabular}{lrl}
+\toprule
+Exponent                & Significand & Format \\
+\midrule
+$0$                     & $0$           & Zero \\
+$0$                     & $> 0$         & Denormalised \\
+$1 \leq e \leq 2^w - 2$ & \textit{any} & Normalised \\
+$2^w-1$                 & $0$           & Infinity \\
+$2^w-1$                 & $> 0$         & NaN \\
+\bottomrule
+\end{tabular}
+\end{center}
+\end{table}
+
+There's no built-in literals for Infinity or NaN, so they
+are constructed using the {\tt Read} instances for {\tt Double} and
+{\tt Float}.
+
+\begin{code}
+merge :: (Read a, RealFloat a) => RawFloat -> a
+merge f@(RawFloat _ e sig eWidth _)
+	| e == 0 = if sig == 0
+		then 0.0
+		else denormalised f
+	| e == eMax - 1 = if sig == 0
+		then read "Infinity"
+		else read "NaN"
+	| otherwise = normalised f
+	where eMax = 2 `pow` eWidth
+\end{code}
+
+If a value is normalised, its significand has an implied {\tt 1} bit
+in its most-significant bit. The significand must be adjusted by
+this value before being passed to {\tt encodeField}.
+
+\begin{code}
+normalised :: RealFloat a => RawFloat -> a
+normalised f = encodeFloat fraction exp' where
+	Significand sig = rawSignificand f
+	Exponent exp' = unbiased - sigWidth
+	
+	fraction = sig + (1 `bitShiftL` rawSignificandWidth f)
+	
+	sigWidth = fromIntegral $ rawSignificandWidth f
+	unbiased = unbias (rawExponent f) (rawExponentWidth f)
+\end{code}
+
+For denormalised values, the implied {\tt 1} bit is the least-significant
+bit of the exponent.
+
+\begin{code}
+denormalised :: RealFloat a => RawFloat -> a
+denormalised f = encodeFloat sig exp' where
+	Significand sig = rawSignificand f
+	Exponent exp' = unbiased - sigWidth + 1
+	
+	sigWidth = fromIntegral $ rawSignificandWidth f
+	unbiased = unbias (rawExponent f) (rawExponentWidth f)
+\end{code}
+
+By composing {\tt split} and {\tt merge}, the absolute value of the
+float is calculated. Before being returned to the calling function, it
+must be signed appropriately.
+
+\begin{code}
+getFloat :: (Read a, RealFloat a) => ByteCount
+            -> ([Word8] -> RawFloat) -> Get a
+getFloat (ByteCount width) parser = do
+	raw <- fmap (parser . B.unpack) $ getByteString width
+	let absFloat = merge raw
+	return $ case rawSign raw of
+		Positive ->  absFloat
+		Negative -> -absFloat
 \end{code}
 
 \section{Serialising}
@@ -180,14 +226,14 @@ putFloat width f v = putByteString $ B.pack words' where
 \end{code}
 
 \begin{code}
-floatComponents :: (RealFloat a) => ByteCount -> a -> (Bool, Fraction, Exponent)
+floatComponents :: (RealFloat a) => ByteCount -> a -> (Bool, Significand, Exponent)
 floatComponents width v =
 	case (dFraction, dExponent, biasedE) of
 		(0, 0, _) -> (sign, 0, 0)
 		(_, _, 0) -> (sign, truncatedFraction + 1, 0)
 		_         -> (sign, truncatedFraction, biasedE)
-	where dFraction   = Fraction $ fst (decodeFloat v)
-	      dExponent   = Exponent $ snd (decodeFloat v)
+	where dFraction   = Significand $ fst (decodeFloat v)
+	      dExponent   = Exponent . fromIntegral $ snd (decodeFloat v)
 	      eWidth      = exponentWidth (bitCount width)
 	      fWidth      = bitCount width - eWidth - 1 -- 1 for sign bit
 	      biasedE     = bias (dExponent + fromIntegral fWidth) eWidth
@@ -209,7 +255,7 @@ floatToMerged width v = mergeFloatBits' (floatComponents width v) where
 \end{code}
 
 \begin{code}
-mergeFloatBits :: BitCount -> BitCount -> Bool -> Fraction -> Exponent -> Integer
+mergeFloatBits :: BitCount -> BitCount -> Bool -> Significand -> Exponent -> Integer
 mergeFloatBits fWidth eWidth s f e = merged where
 	merged = shiftedSign .|. shiftedFrac .|. shiftedExp
 	sBit = if s then 1 else 0 :: Integer
@@ -262,10 +308,13 @@ unbias e eWidth = e + 1 - (2 `pow` (eWidth - 1))
 \section{Byte and bit counting}
 
 \begin{code}
+data Sign = Positive | Negative
+	deriving (Show)
+
 newtype Exponent = Exponent Int
 	deriving (Show, Eq, Num, Ord, Real, Enum, Integral, Bits)
 
-newtype Fraction = Fraction Integer
+newtype Significand = Significand Integer
 	deriving (Show, Eq, Num, Ord, Real, Enum, Integral, Bits)
 
 newtype BitCount = BitCount Int
@@ -288,6 +337,27 @@ bitShiftR x (BitCount n) = shiftR x n
 \end{code}
 
 \section{Utility}
+
+Considering a byte list as a sequence of bits, slice it from start
+inclusive to end exclusive, and return the resulting bit sequence as an
+integer.
+
+\begin{code}
+bitSlice :: [Word8] -> BitCount -> BitCount -> Integer
+bitSlice bs = sliceInt (foldl' step 0 bs) bitCount' where
+	step acc w     = shiftL acc 8 + fromIntegral w
+	bitCount'      = bitsInWord8 bs
+\end{code}
+
+Slice a single integer by start and end bit location
+
+\begin{code}
+sliceInt :: Integer -> BitCount -> BitCount -> BitCount -> Integer
+sliceInt x xBitCount s e = fromIntegral sliced where
+	sliced = (x .&. startMask) `bitShiftR` (xBitCount - e)
+	startMask = n1Bits (xBitCount - s)
+	n1Bits n  = (2 `pow` n) - 1
+\end{code}
 
 Integral version of {\tt (**)}
 
