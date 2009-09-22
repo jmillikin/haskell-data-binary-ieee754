@@ -43,32 +43,32 @@ import Data.Binary.Put (Put, putByteString)
 
 \begin{code}
 getFloat16be :: Get Float
-getFloat16be = getFloat (ByteCount 2) split
+getFloat16be = getFloat (ByteCount 2) splitBytes
 \end{code}
 
 \begin{code}
 getFloat16le :: Get Float
-getFloat16le = getFloat (ByteCount 2) $ split . reverse
+getFloat16le = getFloat (ByteCount 2) $ splitBytes . reverse
 \end{code}
 
 \begin{code}
 getFloat32be :: Get Float
-getFloat32be = getFloat (ByteCount 4) split
+getFloat32be = getFloat (ByteCount 4) splitBytes
 \end{code}
 
 \begin{code}
 getFloat32le :: Get Float
-getFloat32le = getFloat (ByteCount 4) $ split . reverse
+getFloat32le = getFloat (ByteCount 4) $ splitBytes . reverse
 \end{code}
 
 \begin{code}
 getFloat64be :: Get Double
-getFloat64be = getFloat (ByteCount 8) split
+getFloat64be = getFloat (ByteCount 8) splitBytes
 \end{code}
 
 \begin{code}
 getFloat64le :: Get Double
-getFloat64le = getFloat (ByteCount 8) $ split . reverse
+getFloat64le = getFloat (ByteCount 8) $ splitBytes . reverse
 \end{code}
 
 \subsection{Implementation}
@@ -95,8 +95,8 @@ The exponent and signifcand are drawn directly from the bits in the
 original float, and have not been unbiased or otherwise modified.
 
 \begin{code}
-split :: [Word8] -> RawFloat
-split bs = RawFloat sign exp' sig expWidth sigWidth where
+splitBytes :: [Word8] -> RawFloat
+splitBytes bs = RawFloat sign exp' sig expWidth sigWidth where
 	nBits = bitsInWord8 bs
 	sign = if head bs .&. 0x80 == 0x80
 		then Negative
@@ -178,7 +178,7 @@ denormalised f = encodeFloat sig exp' where
 	unbiased = unbias (rawExponent f) (rawExponentWidth f)
 \end{code}
 
-By composing {\tt split} and {\tt merge}, the absolute value of the
+By composing {\tt splitBytes} and {\tt merge}, the absolute value of the
 float is calculated. Before being returned to the calling function, it
 must be signed appropriately.
 
