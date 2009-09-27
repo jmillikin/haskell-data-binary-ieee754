@@ -12,6 +12,10 @@ category: Data
 stability: experimental
 bug-reports: mailto:jmillikin@gmail.com
 
+extra-source-files:
+  data-binary-ieee754.tex
+  Tests.hs
+
 source-repository head
   type: darcs
   location: http://patch-tag.com/r/data-binary-ieee754/pullrepo
