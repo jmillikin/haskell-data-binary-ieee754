@@ -16,11 +16,13 @@ tested-with: GHC==6.10.4, GHC==6.12.1
 
 extra-source-files:
   data-binary-ieee754.tex
-  Tests.hs
 
 source-repository head
   type: darcs
   location: http://ianen.org/haskell/data-binary-ieee754/
+
+flag test
+  default: False
 
 library
   build-depends:
@@ -30,3 +32,14 @@ library
 
   exposed-modules:
     Data.Binary.IEEE754
+
+executable data-binary-ieee754_tests
+  main-is: Tests.hs
+
+  if flag(test)
+    build-depends:
+        QuickCheck >= 2.2 && < 2.3
+      , test-framework >= 0.2 && < 0.4
+      , test-framework-quickcheck2 >= 0.2 && < 0.3
+  else
+    buildable: False

@@ -15,10 +15,11 @@
   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 -}
 
-module Main () where
+module Main (tests, main) where
 
 import Test.QuickCheck
-import Test.QuickCheck.Batch
+import qualified Test.Framework as F
+import Test.Framework.Providers.QuickCheck2 (testProperty)
 
 import qualified Data.ByteString.Lazy as B
 import Data.Word (Word8)
@@ -27,37 +28,34 @@ import Data.Binary.Put (Put, runPut)
 
 import Data.Binary.IEEE754
 
-runOnce = TestOptions
-	{ no_of_tests     = 1
-	, length_of_tests = 1
-	, debug_tests     = False
-	}
-
-runDeep = TestOptions
-	{ no_of_tests     = 1000
-	, length_of_tests = 0
-	, debug_tests     = False
-	}
-
-main = do
-	runTests "parsing" runOnce . map (run . property) . concat $
-		[ props_GetFloat16
-		, props_GetFloat32
-		, props_GetFloat64
+tests :: [F.Test]
+tests =
+	[ F.testGroup "parsing"
+		[ props_GetFloat16 "16"
+		, props_GetFloat32 "32"
+		, props_GetFloat64 "64"
 		]
-	runTests "serialising" runOnce . map (run . property) . concat $
-		[ props_PutFloat32
-		, props_PutFloat64
+	, F.testGroup "serialising"
+		[ props_PutFloat32 "32"
+		, props_PutFloat64 "64"
 		]
-	runTests "passthrough" runDeep . map run $
-		[ property $ passthrough putFloat32le getFloat32le
-		, property $ passthrough putFloat32be getFloat32be
-		, property $ passthrough putFloat64le getFloat64le
-		, property $ passthrough putFloat64be getFloat64be
+	, F.testGroup "passthrough"
+		[ testPassthrough "32-le" putFloat32le getFloat32le
+		, testPassthrough "32-be" putFloat32be getFloat32be
+		, testPassthrough "64-le" putFloat64le getFloat64le
+		, testPassthrough "64-be" putFloat64be getFloat64be
 		]
+	]
 
-props_GetFloat16 = let check = checkGet getFloat16be getFloat16le in
-	[ check [0, 0]    (and' (== 0.0) (not . isNegativeZero))
+main :: IO ()
+main = F.defaultMain tests
+
+props_GetFloat16 :: String -> F.Test
+props_GetFloat16 label =
+	let check = checkGet getFloat16be getFloat16le in
+	F.testGroup label
+	
+	[ check [0, 0]    ((== 0.0) .&& (not . isNegativeZero))
 	, check [0x80, 0] isNegativeZero
 	
 	-- Normalised
@@ -73,12 +71,16 @@ props_GetFloat16 = let check = checkGet getFloat16be getFloat16le in
 	, check [0xFC, 0] (== -inf32)
 	
 	-- NaN
-	, check [0x7E, 0] (and' isNaN (not . isNegativeNaN))
+	, check [0x7E, 0] (isNaN .&& (not . isNegativeNaN))
 	, check [0xFE, 0] isNegativeNaN
 	]
 
-props_GetFloat32 = let check = checkGet getFloat32be getFloat32le in
-	[ check [0, 0, 0, 0]    (and' (== 0.0) (not . isNegativeZero))
+props_GetFloat32 :: String -> F.Test
+props_GetFloat32 label =
+	let check = checkGet getFloat32be getFloat32le in
+	F.testGroup label
+	
+	[ check [0, 0, 0, 0]    ((== 0.0) .&& (not . isNegativeZero))
 	, check [0x80, 0, 0, 0] isNegativeZero
 	
 	-- Normalised
@@ -94,12 +96,16 @@ props_GetFloat32 = let check = checkGet getFloat32be getFloat32le in
 	, check [0xFF, 0x80, 0, 0] (== -inf32)
 	
 	-- NaN and negative NaN
-	, check [0x7F, 0xC0, 0, 0] (and' isNaN (not . isNegativeNaN))
+	, check [0x7F, 0xC0, 0, 0] (isNaN .&& (not . isNegativeNaN))
 	, check [0xFF, 0xC0, 0, 0] isNegativeNaN
 	]
 
-props_GetFloat64 = let check = checkGet getFloat64be getFloat64le in
-	[ check [0, 0, 0, 0, 0, 0, 0, 0]    (and' (== 0.0) (not . isNegativeZero))
+props_GetFloat64 :: String -> F.Test
+props_GetFloat64 label =
+	let check = checkGet getFloat64be getFloat64le in
+	F.testGroup label
+	
+	[ check [0, 0, 0, 0, 0, 0, 0, 0]    ((== 0.0) .&& (not . isNegativeZero))
 	, check [0x80, 0, 0, 0, 0, 0, 0, 0] isNegativeZero
 	
 	-- Normalised
@@ -115,11 +121,15 @@ props_GetFloat64 = let check = checkGet getFloat64be getFloat64le in
 	, check [0xFF, 0xF0, 0, 0, 0, 0, 0, 0] (== -inf64)
 	
 	-- NaN
-	, check [0x7F, 0xF8, 0, 0, 0, 0, 0, 0] (and' isNaN (not . isNegativeNaN))
+	, check [0x7F, 0xF8, 0, 0, 0, 0, 0, 0] (isNaN .&& (not . isNegativeNaN))
 	, check [0xFF, 0xF8, 0, 0, 0, 0, 0, 0] isNegativeNaN
 	]
 
-props_PutFloat32 = let check = checkPut putFloat32be putFloat32le in
+props_PutFloat32 :: String -> F.Test
+props_PutFloat32 label =
+	let check = checkPut putFloat32be putFloat32le in
+	F.testGroup label
+	
 	[ check [0, 0, 0, 0]   0.0
 	, check [0x80, 0, 0, 0] (-0.0)
 	
@@ -140,7 +150,11 @@ props_PutFloat32 = let check = checkPut putFloat32be putFloat32le in
 	, check [0xFF, 0xC0, 0, 0] (-nan32)
 	]
 
-props_PutFloat64 = let check = checkPut putFloat64be putFloat64le in
+props_PutFloat64 :: String -> F.Test
+props_PutFloat64 label =
+	let check = checkPut putFloat64be putFloat64le in
+	F.testGroup label
+	
 	[ check [0, 0, 0, 0, 0, 0, 0, 0]      0.0
 	, check [0x80, 0, 0, 0, 0, 0, 0, 0] (-0.0)
 	
@@ -161,30 +175,45 @@ props_PutFloat64 = let check = checkPut putFloat64be putFloat64le in
 	, check [0xFF, 0xF8, 0, 0, 0, 0, 0, 0] (-nan64)
 	]
 
-checkGet :: (Show a, Eq a, RealFloat a) => Get a -> Get a -> [Word8] -> (a -> Bool) -> Property
-checkGet getBE getLE bytes f = forAll (return bytes) (const valid) where
+checkGet :: (Show a, Eq a, RealFloat a)
+         => Get a -- ^ big endian
+         -> Get a -- ^ little endian
+         -> [Word8] -- ^ big-endian bytes
+         -> (a -> Bool) -- ^ verify result
+         -> F.Test
+checkGet getBE getLE bytes f = testProperty "get" $ forAll (return bytes) (const valid) where
 	valid = B.null remainingBE && B.null remainingLE && f xBE && f xLE
 	(xBE, remainingBE, _) = runGetState getBE (B.pack bytes) 0
 	(xLE, remainingLE, _) = runGetState getLE (B.pack (reverse bytes)) 0
 
-checkPut :: Show a => (a -> Put) -> (a -> Put) -> [Word8] -> a -> Property
-checkPut putBE putLE bytes x = forAll (return x) (const valid) where
+checkPut :: Show a
+         => (a -> Put) -- ^ big endian
+         -> (a -> Put) -- ^ little endian
+         -> [Word8] -- ^ expected big-endian bytes
+         -> a
+         -> F.Test
+checkPut putBE putLE bytes x = testProperty "put" $ forAll (return x) (const valid) where
 	valid = sameResult && bytes == B.unpack bytesBE
 	sameResult = bytesBE == B.reverse bytesLE
 	bytesBE = runPut (putBE x)
 	bytesLE = runPut (putLE x)
 
-and' :: (a -> Bool) -> (a -> Bool) -> a -> Bool
-and' f g x = f x && g x
+(.&&) :: (a -> Bool) -> (a -> Bool) -> a -> Bool
+(.&&) f g x = f x && g x
 
 isNegativeNaN :: RealFloat a => a -> Bool
 isNegativeNaN x = isNaN x && (floor x > 0)
 
 -- Verify that the given put and get functions are inverses.
-passthrough :: Eq a => (a -> Put) -> Get a -> a -> Bool
-passthrough put get x = x == x' && B.null remaining where
+testPassthrough :: (Arbitrary a, Show a, Eq a)
+                => F.TestName
+                -> (a -> Put)
+                -> Get a
+                -> F.Test
+testPassthrough name put get = testProperty name $ \x -> let
 	bytes = runPut (put x)
 	(x', remaining, _) = runGetState get bytes 0
+	in x == x' && B.null remaining
 
 -- Pseudo-literals for special values
 inf32 :: Float
