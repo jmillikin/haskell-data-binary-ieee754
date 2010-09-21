@@ -17,6 +17,10 @@ module Data.Binary.IEEE754 (
 	-- * Serializing
 	, putFloat32be, putFloat32le
 	, putFloat64be, putFloat64le
+	
+	-- * Float <-> Word conversion
+	, floatToWord, wordToFloat
+	, doubleToWord, wordToDouble
 ) where
 
 import Prelude hiding (exp)
@@ -54,6 +58,18 @@ putFloat64be = P.putWord64be . fromFloat
 
 putFloat64le :: Double -> P.Put
 putFloat64le = P.putWord64le . fromFloat
+
+floatToWord :: Float -> F.Word32
+floatToWord = fromFloat
+
+wordToFloat :: F.Word32 -> Float
+wordToFloat = toFloat
+
+doubleToWord :: Double -> F.Word64
+doubleToWord = fromFloat
+
+wordToDouble :: F.Word64 -> Double
+wordToDouble = toFloat
 
 toFloat :: (F.Storable word, F.Storable float) => word -> float
 toFloat word = F.unsafePerformIO $ F.alloca $ \buf -> do
