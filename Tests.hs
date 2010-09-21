@@ -1,20 +1,13 @@
-{-
-  Copyright (C) 2009 John Millikin <jmillikin@gmail.com>
-  
-  This program is free software: you can redistribute it and/or modify
-  it under the terms of the GNU General Public License as published by
-  the Free Software Foundation, either version 3 of the License, or
-  any later version.
-  
-  This program is distributed in the hope that it will be useful,
-  but WITHOUT ANY WARRANTY; without even the implied warranty of
-  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-  GNU General Public License for more details.
-  
-  You should have received a copy of the GNU General Public License
-  along with this program.  If not, see <http://www.gnu.org/licenses/>.
--}
-
+-----------------------------------------------------------------------------
+-- |
+-- Module: Tests
+-- Copyright: 2010 John Millikin
+-- License: MIT
+--
+-- Maintainer: jmillikin@gmail.com
+-- Portability: portable
+--
+-----------------------------------------------------------------------------
 module Main (tests, main) where
 
 import Test.QuickCheck
@@ -44,6 +37,12 @@ tests =
 		, testPassthrough "32-be" putFloat32be getFloat32be
 		, testPassthrough "64-le" putFloat64le getFloat64le
 		, testPassthrough "64-be" putFloat64be getFloat64be
+		]
+	, F.testGroup "passthrough NaN"
+		[ testPassthroughNaN "32-le" putFloat32le getFloat32le
+		, testPassthroughNaN "32-be" putFloat32be getFloat32be
+		, testPassthroughNaN "64-le" putFloat64le getFloat64le
+		, testPassthroughNaN "64-be" putFloat64be getFloat64be
 		]
 	]
 
@@ -202,7 +201,8 @@ checkPut putBE putLE bytes x = testProperty "put" $ forAll (return x) (const val
 (.&&) f g x = f x && g x
 
 isNegativeNaN :: RealFloat a => a -> Bool
-isNegativeNaN x = isNaN x && (floor x > 0)
+isNegativeNaN x = isNaN x && frac < 0 where
+	(frac, _) = decodeFloat x
 
 -- Verify that the given put and get functions are inverses.
 testPassthrough :: (Arbitrary a, Show a, Eq a)
@@ -215,6 +215,18 @@ testPassthrough name put get = testProperty name $ \x -> let
 	(x', remaining, _) = runGetState get bytes 0
 	in x == x' && B.null remaining
 
+testPassthroughNaN :: (Arbitrary a, RealFloat a, Read a)
+                    => F.TestName
+                    -> (a -> Put)
+                    -> Get a
+                    -> F.Test
+testPassthroughNaN name put get = testProperty name valid where
+	nan = read "NaN"
+	test x = decodeFloat x == decodeFloat x' && B.null remaining where
+		bytes = runPut (put x)
+		(x', remaining, _) = runGetState get bytes 0
+	valid = test nan && test (- nan)
+
 -- Pseudo-literals for special values
 inf32 :: Float
 inf32 = read "Infinity"
@@ -223,7 +235,7 @@ inf64 :: Double
 inf64 = read "Infinity"
 
 nan32 :: Float
-nan32 = read "NaN"
+nan32 = - (read "NaN")
 
 nan64 :: Double
-nan64 = read "NaN"
+nan64 = - (read "NaN")
