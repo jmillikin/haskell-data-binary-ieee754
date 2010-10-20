@@ -1,5 +1,5 @@
 name: data-binary-ieee754
-version: 0.4.2
+version: 0.4.2.1
 synopsis: Parser/Serialiser for IEEE-754 floating-point values
 description: Convert Float and Decimal values to/from raw octets.
 license: MIT
@@ -11,12 +11,12 @@ cabal-version: >=1.6
 category: Data
 stability: experimental
 bug-reports: mailto:jmillikin@gmail.com
-homepage: http://ianen.org/haskell/data-binary-ieee754/
+homepage: http://john-millikin.com/software/data-binary-ieee754/
 tested-with: GHC==6.12.1
 
 source-repository head
-  type: darcs
-  location: http://ianen.org/haskell/data-binary-ieee754/
+  type: bazaar
+  location: http://john-millikin.com/software/data-binary-ieee754/
 
 flag test
   default: False
@@ -36,7 +36,7 @@ executable data-binary-ieee754_tests
 
   if flag(test)
     build-depends:
-        QuickCheck >= 2.2 && < 2.3
+        QuickCheck >= 2.2 && < 2.4
       , test-framework >= 0.2 && < 0.4
       , test-framework-quickcheck2 >= 0.2 && < 0.3
       , bytestring >= 0.9 && < 0.10
