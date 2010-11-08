@@ -22,7 +22,11 @@ flag test
   default: False
 
 library
-  ghc-options: -Wall -fno-warn-unused-do-bind
+  if true
+    ghc-options: -Wall
+
+  if impl(ghc >= 6.11)
+    ghc-options: -fno-warn-unused-do-bind
 
   build-depends:
       base >= 3.0 && < 5
