@@ -23,11 +23,13 @@ module Data.Binary.IEEE754 (
 	, doubleToWord, wordToDouble
 ) where
 
-import Prelude hiding (exp)
-import Data.Bits (shiftL, shiftR, (.|.), (.&.))
+import           Prelude hiding (exp)
+import           Data.Bits (shiftL, shiftR, (.|.), (.&.))
+import qualified Foreign as F
+import           System.IO.Unsafe (unsafePerformIO)
+
 import qualified Data.Binary.Get as G
 import qualified Data.Binary.Put as P
-import qualified Foreign as F
 
 getFloat16be :: G.Get Float
 getFloat16be = fmap toFloat16 G.getWord16be
@@ -72,12 +74,12 @@ wordToDouble :: F.Word64 -> Double
 wordToDouble = toFloat
 
 toFloat :: (F.Storable word, F.Storable float) => word -> float
-toFloat word = F.unsafePerformIO $ F.alloca $ \buf -> do
+toFloat word = unsafePerformIO $ F.alloca $ \buf -> do
 	F.poke (F.castPtr buf) word
 	F.peek buf
 
 fromFloat :: (F.Storable word, F.Storable float) => float -> word
-fromFloat float = F.unsafePerformIO $ F.alloca $ \buf -> do
+fromFloat float = unsafePerformIO $ F.alloca $ \buf -> do
 	F.poke (F.castPtr buf) float
 	F.peek buf
 
